@@ -1,8 +1,9 @@
+### Build the project using the Gradle wrapper
+```sh
 gradlew build
-java --add-opens java.base/sun.nio.ch=ALL-UNNAMED -jar build/libs/BDC.jar 3 sentence_small.txt
+```
 
-java -jar build/libs/BDC.jar 3 sentence_small.txt
-
-
-gradlew compileJava
-java -cp build/classes/java/main WordCountExample 1 sentence_small.txt
+### Run the application using the Gradle wrapper with a text file argument
+```sh
+gradlew run --args="3 sentence_small.txt"
+```

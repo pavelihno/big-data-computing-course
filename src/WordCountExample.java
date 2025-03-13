@@ -33,7 +33,7 @@ public class WordCountExample{
     Logger.getLogger("akka").setLevel(Level.OFF);
     SparkConf conf = new SparkConf(true).setAppName("WordCount").setMaster("local[*]");
     JavaSparkContext sc = new JavaSparkContext(conf);
-    sc.setLogLevel("OFF");
+    sc.setLogLevel("WARN");
 
     // &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
     // INPUT READING
