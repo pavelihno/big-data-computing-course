@@ -1,0 +1,23 @@
+# Build directories
+/build/
+/.gradle/
+
+# Eclipse, IntelliJ IDEA, VS Code, and other IDE specific files
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
