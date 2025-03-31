@@ -4,7 +4,7 @@ plugins {
 }
 
 application {
-    mainClass = 'WordCountExample'
+    mainClass = project.hasProperty('mainClass') ? project.mainClass : ''
 }
 
 repositories {
