@@ -1,3 +1,7 @@
+## Requirements
+
+- Java 17.0.6 LTS (JDK 17)
+
 ## Build the project using the Gradle wrapper
 ```sh
 gradlew build
