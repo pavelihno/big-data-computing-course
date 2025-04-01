@@ -16,5 +16,6 @@ gradlew run -PmainClass=WordCountExample --args="3 ./data/sentence_small.txt"
 
 ### Homework 1
 ```sh
-gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 3 4 5"
+gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 1 4 20"
+gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 2 4 20"
 ```

@@ -1,68 +1,105 @@
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashMap;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.clustering.KMeans;
+import org.apache.spark.mllib.clustering.KMeansModel;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
+import scala.Tuple2;
+
 public class G23HW1 {
 
-    public static double computeTotalDistance(ArrayList<Vector> points, ArrayList<Vector> centers) {
+    public static double getMinSquaredDistance(Vector point, ArrayList<Vector> centers) {
         /*
-         * Computes the total distance from all points to their nearest centers
+         * Computes the squared distance from a point to its nearest center
          */
-        double totalDistance = 0d;
-        for (Vector point : points) {
-            double minDistance = Double.MAX_VALUE;
-            for (Vector center : centers) {
-                double distance = Vectors.sqdist(point, center);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                }
-            }
-            totalDistance += minDistance;
+        double minDistance = Double.MAX_VALUE;
+        for (Vector center : centers) {
+            double distance = Vectors.sqdist(point, center);
+            minDistance = Math.min(minDistance, distance);
         }
-        return totalDistance;
+        return minDistance;
     }
 
-    public static double MRComputeStandardObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB,
-            ArrayList<Vector> centers) {
+    public static double MRComputeStandardObjective(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers) {
         /*
-         * Computes the total distance from all points to their nearest centers
+         * Computes the total squared distance from all points to their nearest centers
          * for both sets of points A and B, and returns the sum
          */
-        ArrayList<Vector> points = new ArrayList<>(pointsA);
-        points.addAll(pointsB);
+        double totalSquaredDistance = points.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
+                .reduce((a, b) -> a + b);
 
-        double totalDistance = computeTotalDistance(points, centers);
-
-        return totalDistance;
+        return totalSquaredDistance / points.count();
     }
 
-    public static double MRComputeFairObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB,
-            ArrayList<Vector> centers) {
+    public static double MRComputeFairObjective(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers) {
         /*
-         * Computes the average distance from all points to their nearest centers
+         * Computes the average squared distance from all points to their nearest
+         * centers
          * for both sets of points A and B, and returns the maximum of the two averages
          */
-        double totalDistanceA = computeTotalDistance(pointsA, centers);
-        double totalDistanceB = computeTotalDistance(pointsB, centers);
+        JavaPairRDD<Vector, String> pointsA = points.filter(tuple -> tuple._2().equals("A"));
+        JavaPairRDD<Vector, String> pointsB = points.filter(tuple -> tuple._2().equals("B"));
 
-        double averageDistanceA = totalDistanceA / pointsA.size();
-        double averageDistanceB = totalDistanceB / pointsB.size();
+        double totalSquaredDistanceA = pointsA.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
+                .reduce((a, b) -> a + b);
+        double totalSquaredDistanceB = pointsB.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
+                .reduce((a, b) -> a + b);
 
-        return Math.max(averageDistanceA, averageDistanceB);
+        double averageSqauredDistanceA = totalSquaredDistanceA / pointsA.count();
+        double averageSquaredDistanceB = totalSquaredDistanceB / pointsB.count();
+
+        return Math.max(averageSqauredDistanceA, averageSquaredDistanceB);
     }
 
-    public static void MRPrintStatistics(ArrayList<Vector> points, ArrayList<Vector> centers) {
+    public static void MRPrintStatistics(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers) {
         /*
-         * Computes the triplets (ci,NAi,NBi), for 1≤i≤K=|C|,
-         * where ci is the i-th centroid in C,
-         * NAi, NBi are the numbers of points of A and B, respectively, in the cluster
-         * Ui centered in ci
+         * Computes and prints statistics for each cluster
          */
+
+        // Create an RDD assigning each point to its nearest center index
+        JavaPairRDD<Integer, String> assignments = points.mapToPair(tuple -> {
+            Vector point = tuple._1();
+            String group = tuple._2();
+            int bestIndex = -1;
+            double bestDist = Double.MAX_VALUE;
+            for (int i = 0; i < centers.size(); i++) {
+                double dist = Vectors.sqdist(point, centers.get(i));
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIndex = i;
+                }
+            }
+            return new Tuple2<>(bestIndex, group);
+        });
+
+        // Count group A and B for each cluster
+        HashMap<Integer, Tuple2<Integer, Integer>> counts = new HashMap<>();
+        counts.putAll(assignments
+                .mapToPair(tuple -> {
+                    int cluster = tuple._1();
+                    int countA = tuple._2().equals("A") ? 1 : 0;
+                    int countB = tuple._2().equals("B") ? 1 : 0;
+                    return new Tuple2<>(cluster, new Tuple2<>(countA, countB));
+                })
+                .reduceByKey((t1, t2) -> new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2()))
+                .collectAsMap());
+
+        // Print statistics for each center
+        for (int i = 0; i < centers.size(); i++) {
+            Vector center = centers.get(i);
+            Tuple2<Integer, Integer> tuple = counts.get(i);
+            int na = (tuple != null) ? tuple._1() : 0;
+            int nb = (tuple != null) ? tuple._2() : 0;
+            System.out.printf(
+                    "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
+                    i, center.apply(0), center.apply(1), i, na, i, nb);
+        }
     }
 
     public static void main(String[] args) {
@@ -72,43 +109,60 @@ public class G23HW1 {
         }
 
         String inputFilePath = args[0];
-        int L = Integer.parseInt(args[1]);
-        int K = Integer.parseInt(args[2]);
-        int M = Integer.parseInt(args[3]);
+        int L = Integer.parseInt(args[1]); // Number of partitions
+        int K = Integer.parseInt(args[2]); // Number of clusters
+        int M = Integer.parseInt(args[3]); // Number of iterations
 
-        // Read input file and separate points into two lists based on labels
-        ArrayList<Vector> pointsA = new ArrayList<>();
-        ArrayList<Vector> pointsB = new ArrayList<>();
+        SparkConf conf = new SparkConf(true).setAppName("G23HW1").setMaster("local[*]");
+        JavaSparkContext sc = new JavaSparkContext(conf);
+        sc.setLogLevel("ERROR");
 
-        try (BufferedReader br = new BufferedReader(new FileReader(inputFilePath))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] tokens = line.split(",");
-                if (tokens.length != 3) {
-                    continue;
-                }
-                Vector point = Vectors.dense(
-                    Double.parseDouble(tokens[0]),
-                    Double.parseDouble(tokens[1])
-                );
-                String label = tokens[2].trim();
-                if (label.equals("A")) {
-                    pointsA.add(point);
-                } else if (label.equals("B")) {
-                    pointsB.add(point);
-                }
-            }
-        } catch (IOException e) {
+        try {
+            // Read input file into RDD
+            JavaPairRDD<Vector, String> inputPoints = sc.textFile(inputFilePath, L)
+                    .map(line -> line.split(","))
+                    .filter(tokens -> tokens.length == 3)
+                    .mapToPair(tokens -> {
+                        Vector point = Vectors.dense(
+                                Double.parseDouble(tokens[0]),
+                                Double.parseDouble(tokens[1]));
+                        String group = tokens[2].trim();
+                        return new Tuple2<>(point, group);
+                    });
+
+            inputPoints.cache();
+
+            // Count total points and points in each demographic group
+            long N = inputPoints.count();
+            long NA = inputPoints.filter(tuple -> tuple._2().equals("A")).count();
+            long NB = inputPoints.filter(tuple -> tuple._2().equals("B")).count();
+
+            System.out.printf("Input file: %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
+            System.out.printf("N = %d, NA = %d, NB = %d\n", N, NA, NB);
+
+            // Run K-means clustering
+            KMeansModel kmeansModel = KMeans.train(
+                    inputPoints.keys().rdd(),
+                    K, // Number of clusters
+                    M, // Number of iterations
+                    "k-means||",
+                    123);
+
+            // Extract cluster centers
+            ArrayList<Vector> centers = new ArrayList<>(Arrays.asList(kmeansModel.clusterCenters()));
+
+            double standardObjective = MRComputeStandardObjective(inputPoints, centers);
+            double fairObjective = MRComputeFairObjective(inputPoints, centers);
+
+            System.out.printf("Delta(U,C) = %.6f\n", standardObjective);
+            System.out.printf("Phi(A,B,C) = %.6f\n", fairObjective);
+
+            MRPrintStatistics(inputPoints, centers);
+
+        } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            sc.close();
         }
-
-        // Shuffle points and select K random centers
-        ArrayList<Vector> points = new ArrayList<>(pointsA);
-        points.addAll(pointsB);
-        Collections.shuffle(points);
-        ArrayList<Vector> centers = new ArrayList<>(points.subList(0, K));
-
-        System.out.println(MRComputeStandardObjective(pointsA, pointsB, centers));
-        System.out.println(MRComputeFairObjective(pointsA, pointsB, centers));
     }
 }
