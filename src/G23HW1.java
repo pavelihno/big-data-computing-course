@@ -7,45 +7,46 @@ import java.util.Collections;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
-
 public class G23HW1 {
 
     public static double computeTotalDistance(ArrayList<Vector> points, ArrayList<Vector> centers) {
         /*
-            Computes the total distance from all points to their nearest centers
-        */
+         * Computes the total distance from all points to their nearest centers
+         */
         double totalDistance = 0d;
         for (Vector point : points) {
             double minDistance = Double.MAX_VALUE;
             for (Vector center : centers) {
-            double distance = Vectors.sqdist(point, center);
-            if (distance < minDistance) {
-                minDistance = distance;
-            }
+                double distance = Vectors.sqdist(point, center);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                }
             }
             totalDistance += minDistance;
         }
         return totalDistance;
     }
 
-    public static double MRComputeStandardObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB, ArrayList<Vector> centers) {
+    public static double MRComputeStandardObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB,
+            ArrayList<Vector> centers) {
         /*
-            Computes the total distance from all points to their nearest centers
-            for both sets of points A and B, and returns the sum
-        */
+         * Computes the total distance from all points to their nearest centers
+         * for both sets of points A and B, and returns the sum
+         */
         ArrayList<Vector> points = new ArrayList<>(pointsA);
         points.addAll(pointsB);
-        
+
         double totalDistance = computeTotalDistance(points, centers);
 
         return totalDistance;
     }
 
-    public static double MRComputeFairObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB, ArrayList<Vector> centers) {
+    public static double MRComputeFairObjective(ArrayList<Vector> pointsA, ArrayList<Vector> pointsB,
+            ArrayList<Vector> centers) {
         /*
-            Computes the average distance from all points to their nearest centers
-            for both sets of points A and B, and returns the maximum of the two averages
-        */
+         * Computes the average distance from all points to their nearest centers
+         * for both sets of points A and B, and returns the maximum of the two averages
+         */
         double totalDistanceA = computeTotalDistance(pointsA, centers);
         double totalDistanceB = computeTotalDistance(pointsB, centers);
 
@@ -57,14 +58,15 @@ public class G23HW1 {
 
     public static void MRPrintStatistics(ArrayList<Vector> points, ArrayList<Vector> centers) {
         /*
-            Computes the triplets (ci,NAi,NBi), for 1≤i≤K=|C|, 
-            where ci is the i-th centroid in C,
-            NAi, NBi are the numbers of points of A and B, respectively, in the cluster Ui centered in ci
-        */
+         * Computes the triplets (ci,NAi,NBi), for 1≤i≤K=|C|,
+         * where ci is the i-th centroid in C,
+         * NAi, NBi are the numbers of points of A and B, respectively, in the cluster
+         * Ui centered in ci
+         */
     }
 
     public static void main(String[] args) {
-        
+
         if (args.length != 4) {
             throw new IllegalArgumentException("USAGE: <input_file_path> <L> <K> <M>");
         }
@@ -82,9 +84,11 @@ public class G23HW1 {
             String line;
             while ((line = br.readLine()) != null) {
                 String[] tokens = line.split(",");
-                if (tokens.length != 3) continue;
+                if (tokens.length != 3) {
+                    continue;
+                }
                 Vector point = Vectors.dense(
-                    Double.parseDouble(tokens[0]), 
+                    Double.parseDouble(tokens[0]),
                     Double.parseDouble(tokens[1])
                 );
                 String label = tokens[2].trim();
