@@ -62,43 +62,42 @@ public class G23HW1 {
          * Computes and prints statistics for each cluster
          */
 
-        // Create an RDD assigning each point to its nearest center index
-        JavaPairRDD<Integer, String> assignments = points.mapToPair(tuple -> {
+        // Count group A and B for each cluster
+        HashMap<Integer, Tuple2<Integer, Integer>> counts = new HashMap<>();
+
+        counts.putAll(points.mapToPair(tuple -> {
+        /* Local space  = O(1) */
             Vector point = tuple._1();
             String group = tuple._2();
-            int bestIndex = -1;
+            int cluster = -1;
             double bestDist = Double.MAX_VALUE;
             for (int i = 0; i < centers.size(); i++) {
                 double dist = Vectors.sqdist(point, centers.get(i));
                 if (dist < bestDist) {
                     bestDist = dist;
-                    bestIndex = i;
+                    cluster = i;
                 }
             }
-            return new Tuple2<>(bestIndex, group);
-        });
 
-        // Count group A and B for each cluster
-        HashMap<Integer, Tuple2<Integer, Integer>> counts = new HashMap<>();
-        counts.putAll(assignments
-                .mapToPair(tuple -> {
-                    int cluster = tuple._1();
-                    int countA = tuple._2().equals("A") ? 1 : 0;
-                    int countB = tuple._2().equals("B") ? 1 : 0;
-                    return new Tuple2<>(cluster, new Tuple2<>(countA, countB));
-                })
-                .reduceByKey((t1, t2) -> new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2()))
-                .collectAsMap());
+            int countA = group.equals("A") ? 1 : 0;
+            int countB = group.equals("B") ? 1 : 0;
 
-        // Print statistics for each center
+            return new Tuple2<>(cluster, new Tuple2<>(countA, countB));
+        }).reduceByKey((t1, t2) -> {
+        /* Local space (worst case: all points belong to a single cluster) = O(n) */
+            return new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2());
+        }).collectAsMap());
+
+        // Print statistics for each cluster
         for (int i = 0; i < centers.size(); i++) {
             Vector center = centers.get(i);
             Tuple2<Integer, Integer> tuple = counts.get(i);
             int na = (tuple != null) ? tuple._1() : 0;
             int nb = (tuple != null) ? tuple._2() : 0;
             System.out.printf(
-                    "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
-                    i, center.apply(0), center.apply(1), i, na, i, nb);
+                "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
+                i, center.apply(0), center.apply(1), i, na, i, nb
+            );
         }
     }
 
