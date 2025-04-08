@@ -66,7 +66,7 @@ public class G23HW1 {
         HashMap<Integer, Tuple2<Integer, Integer>> counts = new HashMap<>();
 
         counts.putAll(points.mapToPair(tuple -> {
-        /* Local space  = O(1) */
+            /* Local space = O(1) */
             Vector point = tuple._1();
             String group = tuple._2();
             int cluster = -1;
@@ -84,7 +84,7 @@ public class G23HW1 {
 
             return new Tuple2<>(cluster, new Tuple2<>(countA, countB));
         }).reduceByKey((t1, t2) -> {
-        /* Local space (worst case: all points belong to a single cluster) = O(n) */
+            /* Local space (worst case: all points belong to a single cluster) = O(n) */
             return new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2());
         }).collectAsMap());
 
@@ -95,9 +95,8 @@ public class G23HW1 {
             int na = (tuple != null) ? tuple._1() : 0;
             int nb = (tuple != null) ? tuple._2() : 0;
             System.out.printf(
-                "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
-                i, center.apply(0), center.apply(1), i, na, i, nb
-            );
+                    "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
+                    i, center.apply(0), center.apply(1), i, na, i, nb);
         }
     }
 
@@ -117,7 +116,7 @@ public class G23HW1 {
         sc.setLogLevel("ERROR");
 
         try {
-            // Read input file into RDD
+            // Read input file into RDD with L partitions
             JavaPairRDD<Vector, String> inputPoints = sc.textFile(inputFilePath, L)
                     .map(line -> line.split(","))
                     .filter(tokens -> tokens.length == 3)
