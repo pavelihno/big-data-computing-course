@@ -51,10 +51,10 @@ public class G23HW1 {
         double totalSquaredDistanceB = pointsB.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
                 .reduce((a, b) -> a + b);
 
-        double averageSqauredDistanceA = totalSquaredDistanceA / pointsA.count();
+        double averageSquaredDistanceA = totalSquaredDistanceA / pointsA.count();
         double averageSquaredDistanceB = totalSquaredDistanceB / pointsB.count();
 
-        return Math.max(averageSqauredDistanceA, averageSquaredDistanceB);
+        return Math.max(averageSquaredDistanceA, averageSquaredDistanceB);
     }
 
     public static void MRPrintStatistics(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers, int L) {
@@ -107,8 +107,8 @@ public class G23HW1 {
          * Round 2
          * Map: (j, {cluster: (countA, countB)}) -> (cluster, (countA, countB))
          * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
-         * 
-         * Local space =
+         *
+         * Local space = O(max{N / L, L}) = O(N^(1/2))
         */
 
         counts.putAll(points.zipWithIndex().mapToPair(tuple -> {
@@ -149,7 +149,7 @@ public class G23HW1 {
             }
             return map1;
         }).flatMapToPair(tuple -> {
-            // Local space =
+            // Local space = O(1)
             return tuple._2().entrySet().stream()
                     .map(entry -> new Tuple2<>(
                         entry.getKey(),
@@ -157,6 +157,7 @@ public class G23HW1 {
                     ))
                     .iterator();
         }).reduceByKey((t1, t2) -> {
+            // Local space = O(L)
             return new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2());
         }).collectAsMap());
 
