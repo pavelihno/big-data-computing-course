@@ -101,11 +101,11 @@ public class G23HW1 {
         /* Version 2: 2 rounds solution. 
          * 
          * Round 1
-         * Map: (i, (Point(x, y), group)) -> (i % mod, {cluster: (countA, countB)})
+         * Map: (i, (Point(x, y), group)) -> (i mod L, {cluster: (countA, countB)})
          * Reduce: (j, [{cluster: (countA1, countB1)}, {cluster: (countA2, countB2)}]) -> (j, {cluster: (countA1 + countA2, countB1 + countB2)})
 
          * Round 2
-         * Map: (j, {cluster: (countA, countB)}) -> (cluster, (countA, countB))
+         * Map: (j, {cluster1: (countA1, countB1)}, cluster2: (countA2, countB2)}) -> (cluster1, (countA1, countB1)), (cluster2, (countA2, countB2))
          * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
          *
          * Local space = O(max{N / L, L}) = O(N^(1/2))
@@ -208,7 +208,7 @@ public class G23HW1 {
             long NA = inputPoints.filter(tuple -> tuple._2().equals("A")).count();
             long NB = inputPoints.filter(tuple -> tuple._2().equals("B")).count();
 
-            System.out.printf("Input file: %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
+            System.out.printf("Input file = %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
             System.out.printf("N = %d, NA = %d, NB = %d\n", N, NA, NB);
 
             // Run K-means clustering
