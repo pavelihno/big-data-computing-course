@@ -72,7 +72,7 @@ public class G23HW1 {
          * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
          *
          * Local space = O(N)
-        */
+         */
         /*
         counts.putAll(points.mapToPair(tuple -> {
             // Local space = O(1)
@@ -109,7 +109,7 @@ public class G23HW1 {
          * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
          *
          * Local space = O(max{N / L, L}) = O(N^(1/2))
-        */
+         */
 
         counts.putAll(points.zipWithIndex().mapToPair(tuple -> {
             // Local space = O(1)
