@@ -192,12 +192,13 @@ public class G23HW1 {
             // Read input file into RDD with L partitions
             JavaPairRDD<Vector, String> inputPoints = sc.textFile(inputFilePath, L)
                     .map(line -> line.split(","))
-                    .filter(tokens -> tokens.length == 3)
+                    .filter(tokens -> tokens.length >= 2)
                     .mapToPair(tokens -> {
-                        Vector point = Vectors.dense(
-                                Double.parseDouble(tokens[0]),
-                                Double.parseDouble(tokens[1]));
-                        String group = tokens[2].trim();
+                        String group = tokens[tokens.length - 1];
+                        double[] coords = new double[tokens.length - 1];
+                        for (int i = 0; i < coords.length; i++)
+                            coords[i] = Double.parseDouble(tokens[i]);
+                        Vector point = Vectors.dense(coords);
                         return new Tuple2<>(point, group);
                     });
 
