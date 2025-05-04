@@ -19,3 +19,10 @@ gradlew run -PmainClass=WordCountExample --args="3 ./data/sentence_small.txt"
 gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 1 4 20"
 gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 2 4 20"
 ```
+
+
+### Homework 2
+```sh
+gradlew run -PmainClass=G23GEN --args="1000 4"
+gradlew run -PmainClass=G23Visualize --args="./data/generated_points.csv"
+```

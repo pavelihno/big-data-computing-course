@@ -19,6 +19,7 @@ sourceSets {
 dependencies {
     implementation 'org.apache.spark:spark-core_2.12:3.5.1'
     implementation 'org.apache.spark:spark-mllib_2.12:3.5.1'
+    implementation 'org.jfree:jfreechart:1.5.5'
 }
 
 run {
