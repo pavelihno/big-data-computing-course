@@ -1,15 +1,16 @@
-import java.util.Random;
-import java.util.List;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.File;
+import java.util.List;
+import java.util.Locale;
+import java.util.Random;
 
 public class G23GEN {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final int RANDOM_SEED = 123;
     private static final double GROUP_A_PROPORTION = 0.3;       // percentage of points in group A
     private static final double GROUP_A_STD = 5.0;              // SD for group A
@@ -57,7 +58,7 @@ public class G23GEN {
      */
     private static void generatePoints(
             double[][] centers, int[] pointsPerClusterA, int[] pointsPerClusterB,
-            Random rand) throws IOException {
+            Random rand) {
         class Point {
             double x;
             double y;
@@ -74,10 +75,10 @@ public class G23GEN {
             @Override
             public String toString() {
                 if (DEBUG) {
-                    return String.format(java.util.Locale.US, "%.3f,%.3f,%c,%d", x, y, group, clusterId);
+                    return String.format(Locale.US, "%.3f,%.3f,%c,%d", x, y, group, clusterId);
                 }
                 else {
-                    return String.format(java.util.Locale.US, "%.3f,%.3f,%c", x, y, group);
+                    return String.format(Locale.US, "%.3f,%.3f,%c", x, y, group);
                 }
             }
         }
@@ -106,11 +107,13 @@ public class G23GEN {
 
         // Output points to CSV file
         if (DEBUG) {
-            FileWriter writer = new FileWriter(new File(CSV_OUTPUT_PATH));
-            for (Point point : points) {
-                writer.write(point.toString() + "\n");
+            try (FileWriter writer = new FileWriter(new File(CSV_OUTPUT_PATH))) {
+                for (Point point : points) {
+                    writer.write(point.toString() + "\n");
+                }
+            } catch (IOException e) {
+                System.out.println("Error writing to file: " + e.getMessage());
             }
-            writer.close();
         }
         // Print points to console
         else {
