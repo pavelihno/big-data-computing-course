@@ -1,9 +1,12 @@
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Supplier;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.clustering.KMeans;
 import org.apache.spark.mllib.clustering.KMeansModel;
@@ -14,30 +17,31 @@ import scala.Tuple2;
 
 public class G23HW2 {
 
-    public static double getMinSquaredDistance(Vector point, ArrayList<Vector> centers) {
+    private static final int RANDOM_SEED = 123;
+    private static final boolean LOCAL = true;
+    private static final boolean SAVE_OUTPUT = true;
+    private static final String CSV_FAIR_OUTPUT_PATH = "./data/fair_points.csv";
+    private static final String CSV_STANDARD_OUTPUT_PATH = "./data/standard_points.csv";
+
+    private static Tuple2<Double, Integer> getMinSquaredDistance(Vector point, Vector[] centers) {
         /*
-         * Computes the squared distance from a point to its nearest center
+         * Computes the squared distance from a point to its nearest center and returns both
+         * the distance and the index of the nearest center
          */
         double minDistance = Double.MAX_VALUE;
-        for (Vector center : centers) {
-            double distance = Vectors.sqdist(point, center);
-            minDistance = Math.min(minDistance, distance);
+        int minIndex = 0;
+
+        for (int i = 0; i < centers.length; i++) {
+            double distance = Vectors.sqdist(point, centers[i]);
+            if (distance < minDistance) {
+                minDistance = distance;
+                minIndex = i;
+            }
         }
-        return minDistance;
+        return new Tuple2<>(minDistance, minIndex);
     }
 
-    public static double MRComputeStandardObjective(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers) {
-        /*
-         * Computes the total squared distance from all points to their nearest centers
-         * for both sets of points A and B, and returns the sum
-         */
-        double totalSquaredDistance = points.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
-                .reduce((a, b) -> a + b);
-
-        return totalSquaredDistance / points.count();
-    }
-
-    public static double MRComputeFairObjective(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers) {
+    private static double MRComputeFairObjective(JavaPairRDD<Vector, String> points, Vector[] centers) {
         /*
          * Computes the average squared distance from all points to their nearest
          * centers
@@ -46,10 +50,12 @@ public class G23HW2 {
         JavaPairRDD<Vector, String> pointsA = points.filter(tuple -> tuple._2().equals("A"));
         JavaPairRDD<Vector, String> pointsB = points.filter(tuple -> tuple._2().equals("B"));
 
-        double totalSquaredDistanceA = pointsA.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
-                .reduce((a, b) -> a + b);
-        double totalSquaredDistanceB = pointsB.map(tuple -> getMinSquaredDistance(tuple._1(), centers))
-                .reduce((a, b) -> a + b);
+        double totalSquaredDistanceA = pointsA.map(tuple -> {
+            return getMinSquaredDistance(tuple._1(), centers)._1();
+        }).reduce((a, b) -> a + b);
+        double totalSquaredDistanceB = pointsB.map(tuple -> {
+            return getMinSquaredDistance(tuple._1(), centers)._1();
+        }).reduce((a, b) -> a + b);
 
         double averageSquaredDistanceA = totalSquaredDistanceA / pointsA.count();
         double averageSquaredDistanceB = totalSquaredDistanceB / pointsB.count();
@@ -57,119 +63,82 @@ public class G23HW2 {
         return Math.max(averageSquaredDistanceA, averageSquaredDistanceB);
     }
 
-    public static void MRPrintStatistics(JavaPairRDD<Vector, String> points, ArrayList<Vector> centers, int L) {
+    private static Vector[] MRLloyds(JavaPairRDD<Vector, String> points, int K, int M) {
         /*
-         * Computes and prints statistics for each cluster
+         * Computes the K-means clustering using Lloyd's algorithm
+         * and returns the cluster centers
          */
+        KMeansModel kmeansModel = KMeans.train(
+                points.keys().rdd(),
+                K, // Number of clusters
+                M, // Number of iterations
+                "k-means||",
+                RANDOM_SEED);
 
-        // Count group A and B for each cluster
-        HashMap<Integer, Tuple2<Long, Long>> counts = new HashMap<>();
+        return kmeansModel.clusterCenters();
+    }
 
-        /* Version 1: 1 round solution.
+    private static Vector[] MRFairLloyds(JavaPairRDD<Vector, String> points, int K, int M) {
+        /*
+         * Computes the K-means clustering using Fair Lloyd's algorithm
+         * and returns the cluster centers
          * 
-         * Round 1
-         * Map: (Point(x, y), group) -> (cluster, (countA, countB))
-         * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
-         *
-         * Local space = O(N)
+         * TODO: Implement Fair Lloyd's algorithm
          */
+        return new Vector[0];
+    }
+
+    private static <T> Tuple2<T, Double> timeOperation(Supplier<T> operation) {
         /*
-        counts.putAll(points.mapToPair(tuple -> {
-            // Local space = O(1)
-            Vector point = tuple._1();
-            String group = tuple._2();
-            int cluster = -1;
-            double bestDist = Double.MAX_VALUE;
-            for (int i = 0; i < centers.size(); i++) {
-                double dist = Vectors.sqdist(point, centers.get(i));
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    cluster = i;
-                }
-            }
+         * Computes the time (in seconds) taken to execute an operation and returns the result along
+         * with the time taken
+         */
 
-            long countA = group.equals("A") ? 1L : 0L;
-            long countB = group.equals("B") ? 1L : 0L;
+        long startTime = System.currentTimeMillis();
+        T result = operation.get();
+        long endTime = System.currentTimeMillis();
+        
+        double durationSeconds = (endTime - startTime) / 1000.0; 
+        return new Tuple2<>(result, durationSeconds);
+    }
 
-            return new Tuple2<>(cluster, new Tuple2<>(countA, countB));
-        }).reduceByKey((t1, t2) -> {
-            // Local space (worst case: all points belong to a single cluster) = O(N)
-            return new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2());
-        }).collectAsMap());
+    private static void savePoints(JavaPairRDD<Vector, String> points, Vector[] centers, String outputPath) {
+        /*
+        * Saves the points to a CSV file
         */
 
-        /* Version 2: 2 rounds solution. 
-         * 
-         * Round 1
-         * Map: (i, (Point(x, y), group)) -> (i mod L, {cluster: (countA, countB)})
-         * Reduce: (j, [{cluster: (countA1, countB1)}, {cluster: (countA2, countB2)}]) -> (j, {cluster: (countA1 + countA2, countB1 + countB2)})
+        try {
+            // Map each point to its nearest center
+            JavaRDD<String> pointsAsStrings = points.map(tuple -> {
+                Vector point = tuple._1();
+                String group = tuple._2();
+            
+                // Find the nearest center
+                int nearestCluster = getMinSquaredDistance(point, centers)._2();
+            
+                // Format directly as a string
+                return String.format(Locale.US, 
+                        "%.3f,%.3f,%c,%d", 
+                        point.apply(0), point.apply(1), 
+                        group.charAt(0), nearestCluster);
+            });
 
-         * Round 2
-         * Map: (j, {cluster1: (countA1, countB1)}, cluster2: (countA2, countB2)}) -> (cluster1, (countA1, countB1)), (cluster2, (countA2, countB2))
-         * Reduce: (cluster, [(countA1, countB1), (countA2, countB2)]) -> (cluster, (countA1 + countA2, countB1 + countB2))
-         *
-         * Local space = O(max{N / L, L}) = O(N^(1/2))
-         */
+            // Collect all points (safe only in LOCAL mode)
+            List<String> lines = pointsAsStrings.collect();
 
-        counts.putAll(points.zipWithIndex().mapToPair(tuple -> {
-            // Local space = O(1)
-            Long index = tuple._2();
-            Vector point = tuple._1()._1();
-            String group = tuple._1()._2();
-            int cluster = -1;
-            double bestDist = Double.MAX_VALUE;
-            for (int i = 0; i < centers.size(); i++) {
-                double dist = Vectors.sqdist(point, centers.get(i));
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    cluster = i;
+            try (FileWriter writer = new FileWriter(outputPath)) {
+                for (String line : lines) {
+                    writer.write(line + "\n");
                 }
+            } catch (IOException e) {
+                System.out.println("Error writing to file: " + e.getMessage());
             }
 
-            long countA = group.equals("A") ? 1L : 0L;
-            long countB = group.equals("B") ? 1L : 0L;
+            System.out.println("Points saved to " + outputPath);
 
-            HashMap<Integer, Tuple2<Long, Long>> localCounts = new HashMap<>();
-
-            localCounts.put(cluster, new Tuple2<>(countA, countB));
-
-            return new Tuple2<>(index % L, localCounts);
-        }).reduceByKey((map1, map2) -> {
-            // Local space = O(N / L)
-
-            // Collect all counts for each cluster in one map (map1)
-            for (Integer cl : map2.keySet()) {
-                Tuple2<Long, Long> localCounts = map2.get(cl);
-                if (map1.containsKey(cl)) {
-                    Tuple2<Long, Long> existing = map1.get(cl);
-                    map1.put(cl, new Tuple2<>(existing._1() + localCounts._1(), existing._2() + localCounts._2()));
-                } else {
-                    map1.put(cl, localCounts);
-                }
-            }
-            return map1;
-        }).flatMapToPair(tuple -> {
-            // Local space = O(1)
-            return tuple._2().entrySet().stream()
-                    .map(entry -> new Tuple2<>(
-                        entry.getKey(),
-                        entry.getValue()
-                    ))
-                    .iterator();
-        }).reduceByKey((t1, t2) -> {
-            // Local space = O(L)
-            return new Tuple2<>(t1._1() + t2._1(), t1._2() + t2._2());
-        }).collectAsMap());
-
-        // Print statistics for each cluster
-        for (int i = 0; i < centers.size(); i++) {
-            Vector center = centers.get(i);
-            Tuple2<Long, Long> tuple = counts.get(i);
-            long na = (tuple != null) ? tuple._1() : 0L;
-            long nb = (tuple != null) ? tuple._2() : 0L;
-            System.out.printf(
-                    "i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d\n",
-                    i, center.apply(0), center.apply(1), i, na, i, nb);
+        } catch (Exception e) {
+            System.err.println("Error saving points: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -184,7 +153,8 @@ public class G23HW2 {
         int K = Integer.parseInt(args[2]); // Number of clusters
         int M = Integer.parseInt(args[3]); // Number of iterations
 
-        SparkConf conf = new SparkConf(true).setAppName("G23HW1").setMaster("local[*]");
+        String masterAddress = LOCAL ? "local[*]" : "yarn";
+        SparkConf conf = new SparkConf(true).setAppName("G23HW2").setMaster(masterAddress);
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.setLogLevel("ERROR");
 
@@ -212,24 +182,34 @@ public class G23HW2 {
             System.out.printf("Input file = %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
             System.out.printf("N = %d, NA = %d, NB = %d\n", N, NA, NB);
 
-            // Run K-means clustering
-            KMeansModel kmeansModel = KMeans.train(
-                    inputPoints.keys().rdd(),
-                    K, // Number of clusters
-                    M, // Number of iterations
-                    "k-means||",
-                    123);
+            // Run clustering algorithms to get centers (with timers)
+            Tuple2<Vector[], Double> standardCentersResult = timeOperation(() -> MRLloyds(inputPoints, K, M));
+            Vector[] standardCenters = standardCentersResult._1();
+            
+            Tuple2<Vector[], Double> fairCentersResult = timeOperation(() -> MRFairLloyds(inputPoints, K, M));
+            Vector[] fairCenters = fairCentersResult._1();
 
-            // Extract cluster centers
-            ArrayList<Vector> centers = new ArrayList<>(Arrays.asList(kmeansModel.clusterCenters()));
+            // Compute fair objectives (with timers)
+            Tuple2<Double, Double> standardCentersObjResult = timeOperation(() -> MRComputeFairObjective(inputPoints, standardCenters));
+            double standardCentersObj = standardCentersObjResult._1();
 
-            double standardObjective = MRComputeStandardObjective(inputPoints, centers);
-            double fairObjective = MRComputeFairObjective(inputPoints, centers);
+            Tuple2<Double, Double> fairCentersObjResult = timeOperation(() -> MRComputeFairObjective(inputPoints, fairCenters));
+            double fairCentersObj = fairCentersObjResult._1();
 
-            System.out.printf("Delta(U,C) = %.6f\n", standardObjective);
-            System.out.printf("Phi(A,B,C) = %.6f\n", fairObjective);
+            // Print statistics
+            System.out.printf(Locale.US, "Phi(A,B,C_stand) = %.6f\n", standardCentersObj);
+            System.out.printf(Locale.US, "Phi(A,B,C_fair) = %.6f\n", fairCentersObj);
+            System.out.printf(Locale.US, "Time for standard Lloyd's algorithm = %.3fs\n", standardCentersResult._2());
+            System.out.printf(Locale.US, "Time for fair Lloyd's algorithm = %.3fs\n", fairCentersResult._2());
 
-            MRPrintStatistics(inputPoints, centers, L);
+            System.out.printf(Locale.US, "Time for objective function with standard centers = %.3fs\n", standardCentersObjResult._2());
+            System.out.printf(Locale.US, "Time for objective function with fair centers = %.3fs\n", fairCentersObjResult._2());
+
+            // Save points to CSV files
+            if (SAVE_OUTPUT && LOCAL) {
+                savePoints(inputPoints, standardCenters, CSV_STANDARD_OUTPUT_PATH);
+                savePoints(inputPoints, fairCenters, CSV_FAIR_OUTPUT_PATH);
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
