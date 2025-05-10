@@ -14,6 +14,7 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 import scala.Tuple2;
+import scala.Tuple4;
 
 public class G23HW2 {
 
@@ -25,8 +26,8 @@ public class G23HW2 {
 
     private static Tuple2<Double, Integer> getMinSquaredDistance(Vector point, Vector[] centers) {
         /*
-         * Computes the squared distance from a point to its nearest center and returns both
-         * the distance and the index of the nearest center
+         * Computes the squared distance from a point to its nearest center and returns
+         * both the distance and the index of the nearest center
          */
         double minDistance = Double.MAX_VALUE;
         int minIndex = 0;
@@ -78,48 +79,238 @@ public class G23HW2 {
         return kmeansModel.clusterCenters();
     }
 
+    private static double[] computeVectorX(double fixedA, double fixedB, double[] alpha, double[] beta, double[] ell, int K) {
+        double gamma = 0.5;
+        double[] xDist = new double[K];
+        double fA, fB;
+        double power = 0.5;
+        int T = 10;
+        for (int t = 1; t <= T; t++) {
+            fA = fixedA;
+            fB = fixedB;
+            power = power / 2;
+            for (int i = 0; i < K; i++) {
+                double temp = (1 - gamma) * beta[i] * ell[i] / (gamma * alpha[i] + (1 - gamma) * beta[i]);
+                xDist[i] = temp;
+                fA += alpha[i] * temp * temp;
+                temp = (ell[i] - temp);
+                fB += beta[i] * temp * temp;
+            }
+            if (fA == fB) {
+                break;
+            }
+            gamma = (fA > fB) ? gamma + power : gamma - power;
+        }
+        return xDist;
+    }
+
+    private static Vector[] CentroidsSelection(JavaPairRDD<Vector, String> points, Vector[] centers, int K, long nA, long nB) {
+        /*
+         * Computes the new centers for the clusters
+         */
+
+        JavaPairRDD<Integer, Tuple2<Vector, String>> clusteredPoints = points.mapToPair(tuple -> {
+            // Map each point to its nearest center
+            Vector point = tuple._1();
+            String group = tuple._2();
+            int clusterId = getMinSquaredDistance(point, centers)._2();
+            return new Tuple2<>(clusterId, new Tuple2<>(point, group));
+        });
+
+        JavaPairRDD<Integer, Tuple4<Long, Vector, Long, Vector>> clusterStats = clusteredPoints.mapToPair(tuple -> {
+            // Calculate stats for each cluster inside one partition
+            int clusterId = tuple._1();
+            Vector point = tuple._2()._1();
+            String group = tuple._2()._2();
+
+            long countA = 0, countB = 0;
+            Vector sumA = null, sumB = null;
+            if (group.equals("A")) {
+                countA = 1;
+                sumA = point;
+            } else {
+                countB = 1;
+                sumB = point;
+            }
+            return new Tuple2<>(clusterId, new Tuple4<>(countA, sumA, countB, sumB));
+        }).reduceByKey((stats1, stats2) -> {
+            // Calculate stats for each cluster across all partitions
+            long countA = stats1._1() + stats2._1();
+            long countB = stats1._3() + stats2._3();
+
+            Vector sumA1 = stats1._2();
+            Vector sumB1 = stats1._4();
+            Vector sumA2 = stats2._2();
+            Vector sumB2 = stats2._4();
+
+            Vector sumA, sumB;
+
+            // Merge sum vectors (sumA and sumB)
+            if (sumA1 == null)
+                sumA = sumA2;
+            else if (sumA2 == null)
+                sumA = sumA1;
+            else {
+                double[] values = new double[sumA1.size()];
+                for (int i = 0; i < values.length; i++) {
+                    values[i] = sumA1.apply(i) + sumA2.apply(i);
+                }
+                sumA = Vectors.dense(values);
+            }
+
+            if (sumB1 == null)
+                sumB = sumB2;
+            else if (sumB2 == null)
+                sumB = sumB1;
+            else {
+                double[] values = new double[sumB1.size()];
+                for (int i = 0; i < values.length; i++) {
+                    values[i] = sumB1.apply(i) + sumB2.apply(i);
+                }
+                sumB = Vectors.dense(values);
+            }
+
+            return new Tuple4<>(countA, sumA, countB, sumB);
+        });
+
+        // Compute alpha, beta, mu_a, mu_b, ell for each cluster
+        double[] alpha = new double[K];
+        double[] beta = new double[K];
+        double[] ell = new double[K];
+        Vector[] mu_a = new Vector[K];
+        Vector[] mu_b = new Vector[K];
+
+        // Initialize mu_a and mu_b arrays
+        int dimensions = centers[0].size();
+        Vector zeroVector = Vectors.zeros(dimensions);
+
+        for (int i = 0; i < K; i++) {
+            mu_a[i] = zeroVector;
+            mu_b[i] = zeroVector;
+        }
+
+        for (int i = 0; i < K; i++) {
+            Tuple4<Long, Vector, Long, Vector> stats = clusterStats.lookup(i).get(0);
+            long countA = stats._1();
+            long countB = stats._3();
+            Vector sumA = stats._2();
+            Vector sumB = stats._4();
+
+            alpha[i] = (double) countA / nA;
+            beta[i] = (double) countB / nB;
+
+            if (countA > 0) {
+                // Calculate mu_a[i] as the centroid of points from group A in cluster
+                double[] muAValues = new double[dimensions];
+                for (int j = 0; j < dimensions; j++) {
+                    muAValues[j] = sumA.apply(j) / countA;
+                }
+                mu_a[i] = Vectors.dense(muAValues);
+            }
+
+            if (countB > 0) {
+                // Calculate mu_b[i] as the centroid of points from group B in cluster
+                double[] muBValues = new double[dimensions];
+                for (int j = 0; j < dimensions; j++) {
+                    muBValues[j] = sumB.apply(j) / countB;
+                }
+                mu_b[i] = Vectors.dense(muBValues);
+            }
+
+            // Calculate ell[i] as Euclidean distance between mu_a[i] and mu_b[i]
+            ell[i] = Math.sqrt(Vectors.sqdist(mu_a[i], mu_b[i]));
+        }
+
+        // Compute fixedA and fixedB
+        double fixedA = clusteredPoints.filter(tuple -> tuple._2()._2().equals("A"))
+                .mapToPair(tuple -> {
+                    int clusterId = tuple._1();
+                    Vector point = tuple._2()._1();
+                    double sqDist = Vectors.sqdist(point, mu_a[clusterId]);
+                    return new Tuple2<>(1, sqDist);
+                })
+                .reduceByKey((a, b) -> a + b)
+                .collect().get(0)._2() / nA;
+
+        double fixedB = clusteredPoints.filter(tuple -> tuple._2()._2().equals("B"))
+                .mapToPair(tuple -> {
+                    int clusterId = tuple._1();
+                    Vector point = tuple._2()._1();
+                    double sqDist = Vectors.sqdist(point, mu_b[clusterId]);
+                    return new Tuple2<>(1, sqDist);
+                })
+                .reduceByKey((a, b) -> a + b)
+                .collect().get(0)._2() / nB;
+
+        double[] x = computeVectorX(fixedA, fixedB, alpha, beta, ell, K);
+
+        // For each cluster compute new center
+        Vector[] newCenters = new Vector[K];
+        for (int i = 0; i < K; i++) {
+            double[] centerValues = new double[dimensions];
+            double factor1 = (ell[i] - x[i]) / ell[i];
+            double factor2 = x[i] / ell[i];
+
+            for (int j = 0; j < dimensions; j++) {
+                centerValues[j] = factor1 * mu_a[i].apply(j) + factor2 * mu_b[i].apply(j);
+            }
+
+            newCenters[i] = Vectors.dense(centerValues);
+        }
+        return newCenters;
+    }
+
     private static Vector[] MRFairLloyds(JavaPairRDD<Vector, String> points, int K, int M) {
         /*
          * Computes the K-means clustering using Fair Lloyd's algorithm
          * and returns the cluster centers
-         * 
-         * TODO: Implement Fair Lloyd's algorithm
          */
-        return new Vector[0];
+
+        long nA = points.filter(tuple -> tuple._2().equals("A")).count();
+        long nB = points.filter(tuple -> tuple._2().equals("B")).count();
+
+        // Initialization of centers (using kmeans|| with 0 iterations)
+        Vector[] centers = MRLloyds(points, K, 0);
+
+        for (int it = 0; it < M; it++) {
+            // Computation of the new centers
+            centers = CentroidsSelection(points, centers, K, nA, nB);
+        }
+        return centers;
     }
 
     private static <T> Tuple2<T, Double> timeOperation(Supplier<T> operation) {
         /*
-         * Computes the time (in seconds) taken to execute an operation and returns the result along
-         * with the time taken
+         * Computes the time (in milliseconds) taken to execute an operation and
+         * returns the result along with the time taken
          */
 
         long startTime = System.currentTimeMillis();
         T result = operation.get();
         long endTime = System.currentTimeMillis();
-        
-        double durationSeconds = (endTime - startTime) / 1000.0; 
-        return new Tuple2<>(result, durationSeconds);
+
+        double duration = (endTime - startTime);
+        return new Tuple2<>(result, duration);
     }
 
     private static void savePoints(JavaPairRDD<Vector, String> points, Vector[] centers, String outputPath) {
         /*
-        * Saves the points to a CSV file
-        */
+         * Saves the points to a CSV file
+         */
 
         try {
             // Map each point to its nearest center
             JavaRDD<String> pointsAsStrings = points.map(tuple -> {
                 Vector point = tuple._1();
                 String group = tuple._2();
-            
+
                 // Find the nearest center
                 int nearestCluster = getMinSquaredDistance(point, centers)._2();
-            
+
                 // Format directly as a string
-                return String.format(Locale.US, 
-                        "%.3f,%.3f,%c,%d", 
-                        point.apply(0), point.apply(1), 
+                return String.format(Locale.US,
+                        "%.3f,%.3f,%c,%d",
+                        point.apply(0), point.apply(1),
                         group.charAt(0), nearestCluster);
             });
 
@@ -179,31 +370,32 @@ public class G23HW2 {
             long NA = inputPoints.filter(tuple -> tuple._2().equals("A")).count();
             long NB = inputPoints.filter(tuple -> tuple._2().equals("B")).count();
 
-            System.out.printf("Input file = %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
-            System.out.printf("N = %d, NA = %d, NB = %d\n", N, NA, NB);
-
             // Run clustering algorithms to get centers (with timers)
             Tuple2<Vector[], Double> standardCentersResult = timeOperation(() -> MRLloyds(inputPoints, K, M));
             Vector[] standardCenters = standardCentersResult._1();
-            
+
             Tuple2<Vector[], Double> fairCentersResult = timeOperation(() -> MRFairLloyds(inputPoints, K, M));
             Vector[] fairCenters = fairCentersResult._1();
 
             // Compute fair objectives (with timers)
-            Tuple2<Double, Double> standardCentersObjResult = timeOperation(() -> MRComputeFairObjective(inputPoints, standardCenters));
+            Tuple2<Double, Double> standardCentersObjResult = timeOperation(
+                    () -> MRComputeFairObjective(inputPoints, standardCenters));
             double standardCentersObj = standardCentersObjResult._1();
 
-            Tuple2<Double, Double> fairCentersObjResult = timeOperation(() -> MRComputeFairObjective(inputPoints, fairCenters));
+            Tuple2<Double, Double> fairCentersObjResult = timeOperation(
+                    () -> MRComputeFairObjective(inputPoints, fairCenters));
             double fairCentersObj = fairCentersObjResult._1();
 
             // Print statistics
-            System.out.printf(Locale.US, "Phi(A,B,C_stand) = %.6f\n", standardCentersObj);
-            System.out.printf(Locale.US, "Phi(A,B,C_fair) = %.6f\n", fairCentersObj);
-            System.out.printf(Locale.US, "Time for standard Lloyd's algorithm = %.3fs\n", standardCentersResult._2());
-            System.out.printf(Locale.US, "Time for fair Lloyd's algorithm = %.3fs\n", fairCentersResult._2());
+            System.out.printf("Input file = %s, L = %d, K = %d, M = %d\n", inputFilePath, L, K, M);
+            System.out.printf("N = %d, NA = %d, NB = %d\n", N, NA, NB);
 
-            System.out.printf(Locale.US, "Time for objective function with standard centers = %.3fs\n", standardCentersObjResult._2());
-            System.out.printf(Locale.US, "Time for objective function with fair centers = %.3fs\n", fairCentersObjResult._2());
+            System.out.printf(Locale.US, "Fair Objective with Standard Centers = %.4f\n", standardCentersObj);
+            System.out.printf(Locale.US, "Fair Objective with Fair Centers = %.4f\n", fairCentersObj);
+            System.out.printf("Time to compute standard centers = %.0f ms\n", standardCentersResult._2());
+            System.out.printf("Time to compute fair centers = %.0f ms\n", fairCentersResult._2());
+            System.out.printf("Time to compute objective with standard centers = %.0f ms\n", standardCentersObjResult._2());
+            System.out.printf("Time to compute objective with fair centers = %.0f ms\n", fairCentersObjResult._2());
 
             // Save points to CSV files
             if (SAVE_OUTPUT && LOCAL) {
