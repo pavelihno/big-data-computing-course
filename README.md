@@ -20,22 +20,21 @@ gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 1 4 20"
 gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 2 4 20"
 ```
 
-
 ### Homework 2
 
 #### Connect to cloud
 
 1. Connect to UNIPD machine via SSH (if not in UNIPD network)
 
-    1. via PuTTY (Windows)
+    - Via PuTTY (Windows)
 
-        hostname: `<account_name>@ssh.studenti.math.unipd.it`
+        Hostname: `<account_name>@ssh.studenti.math.unipd.it`
 
-        port: `22`
+        Port: `22`
 
-        password: `<account_password>`
+        Password: `<account_password>`
 
-    2. via SSH (Linux/Mac)
+    - Via SSH (Linux/Mac)
 
         ```sh
         ssh -p 22 <account_name>@ssh.studenti.math.unipd.it
@@ -43,31 +42,64 @@ gradlew run -PmainClass=G23HW1 --args="./data/uber_small.csv 2 4 20"
 
 2. Connect to cloud
 
-    1. via PuTTY (Windows)
+    - Via PuTTY (Windows)
 
-        hostname: `group23@147.162.226.106`
+        Hostname: `group23@147.162.226.106`
 
-        port: `2222`
+        Port: `2222`
 
-        password: `group23password`
+        Password: `group23password`
     
-    2. via SSH (Linux/Mac)
+    - Via SSH (Linux/Mac)
 
         ```sh
-        ssh -p 2222 groupXX@147.162.226.106
+        ssh -p 2222 group23@147.162.226.106
         ```
 
-#### Run the application
+#### Run the Application
 
-*on local machine:*
+**On Local Machine:**
 ```sh
 gradlew run -PmainClass=G23GEN --args="1000 4"
+gradlew run -PmainClass=G23HW2 --args="./data/generated_points.csv 5 4 30"
 gradlew run -PmainClass=G23Visualize --args="./data/generated_points.csv"
-gradlew run -PmainClass=G23HW2 --args="./data/uber_small.csv 5 4 20"
+gradlew run -PmainClass=G23Visualize --args="./data/standard_points.csv"
+gradlew run -PmainClass=G23Visualize --args="./data/fair_points.csv"
 ```
 
+**On Cloud:**
 
-*on cloud:*
-```sh
+0. Make sure you're using cloud implementation (`LOCAL = false`)
 
-```
+1. Build the project using the Gradle wrapper
+
+    ```sh
+    gradlew -PbuildType=cloud -PmainClass=G23HW2 clean jar
+    ```
+
+2. Transfer the JAR file to the cloud
+
+    - Via PSCP (Windows)
+
+        ```sh
+        pscp -P 2222 build/libs/BDC.jar group23@147.162.226.106:/home/group23/
+        ```
+
+    - Via SCP (Linux/Mac)
+
+        ```sh
+        scp -P 2222 build/libs/BDC.jar group23@147.162.226.106:/home/group23/
+        ```
+
+3. Run the job on the cloud
+
+    *Number of executors*: 2, 4, 8, 16
+
+    *HDFS file paths*: 
+    - `/data/BDC2425/artificial1M7D100K.txt`
+    - `/data/BDC2425/artificial4M7D100K.txt`
+
+    ```sh
+    cd /home/group23
+    spark-submit --num-executors <num_executors> --class G23HW2 BDC.jar <hdfs_file_path> 16 100 10
+    ```
