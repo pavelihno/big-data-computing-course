@@ -43,7 +43,8 @@ public class G23HW2 {
         return new Tuple2<>(minDistance, minIndex);
     }
 
-    private static double MRComputeFairObjective(JavaPairRDD<Vector, String> pointsA, JavaPairRDD<Vector, String> pointsB, Vector[] centers) {
+    private static double MRComputeFairObjective(JavaPairRDD<Vector, String> pointsA,
+            JavaPairRDD<Vector, String> pointsB, Vector[] centers) {
         /*
          * Computes the average squared distance from all points to their nearest
          * centers
@@ -78,7 +79,8 @@ public class G23HW2 {
         return kmeansModel.clusterCenters();
     }
 
-    private static double[] computeVectorX(double fixedA, double fixedB, double[] alpha, double[] beta, double[] ell, int K) {
+    private static double[] computeVectorX(double fixedA, double fixedB, double[] alpha, double[] beta, double[] ell,
+            int K) {
         double gamma = 0.5;
         double[] xDist = new double[K];
         double fA, fB;
@@ -103,7 +105,8 @@ public class G23HW2 {
         return xDist;
     }
 
-    private static Vector[] CentroidsSelection(JavaPairRDD<Vector, String> points, Vector[] centers, int K, long NA, long NB) {
+    private static Vector[] CentroidsSelection(JavaPairRDD<Vector, String> points, Vector[] centers, int K, long NA,
+            long NB) {
         /*
          * Computes the new centers for the clusters
          */
@@ -205,8 +208,7 @@ public class G23HW2 {
                     muAValues[j] = sumA.apply(j) / countA;
                 }
                 mu_a[i] = Vectors.dense(muAValues);
-            }
-            else {
+            } else {
                 mu_a[i] = countB > 0 ? mu_b[i] : centers[i];
             }
 
@@ -217,8 +219,7 @@ public class G23HW2 {
                     muBValues[j] = sumB.apply(j) / countB;
                 }
                 mu_b[i] = Vectors.dense(muBValues);
-            }
-            else {
+            } else {
                 mu_b[i] = countA > 0 ? mu_a[i] : centers[i];
             }
 
@@ -228,21 +229,21 @@ public class G23HW2 {
 
         // Compute fixedA and fixedB
         Map<String, Double> fixedValues = clusteredPoints.mapToPair(tuple -> {
-                int clusterId = tuple._1();
-                Vector point = tuple._2()._1();
-                String group = tuple._2()._2();
-                double sqDist = 0.0;
+            int clusterId = tuple._1();
+            Vector point = tuple._2()._1();
+            String group = tuple._2()._2();
+            double sqDist = 0.0;
 
-                if (group.equals("A")) {
-                    sqDist = Vectors.sqdist(point, mu_a[clusterId]);
-                    return new Tuple2<>("A", sqDist);
-                } else {
-                    sqDist = Vectors.sqdist(point, mu_b[clusterId]);
-                    return new Tuple2<>("B", sqDist);
-                }
-            })
-            .reduceByKey((a, b) -> a + b)
-            .collectAsMap();
+            if (group.equals("A")) {
+                sqDist = Vectors.sqdist(point, mu_a[clusterId]);
+                return new Tuple2<>("A", sqDist);
+            } else {
+                sqDist = Vectors.sqdist(point, mu_b[clusterId]);
+                return new Tuple2<>("B", sqDist);
+            }
+        })
+                .reduceByKey((a, b) -> a + b)
+                .collectAsMap();
 
         double fixedA = fixedValues.getOrDefault("A", 0.0) / NA;
         double fixedB = fixedValues.getOrDefault("B", 0.0) / NB;
@@ -358,10 +359,12 @@ public class G23HW2 {
                     .mapToPair(tokens -> {
                         int groupIdx = tokens.length - 1;
                         try {
-                            // clusterId given as the last column -> ignore it 
+                            // ClusterId given as the last column -> ignore it
                             Integer.parseInt(tokens[groupIdx]);
                             groupIdx--;
-                        } catch (NumberFormatException e) {}
+                        } catch (NumberFormatException e) {
+                            // Ignore the exception, groupIdx is already set to the last column
+                        }
                         String group = tokens[groupIdx];
                         double[] coords = new double[groupIdx];
                         for (int i = 0; i < coords.length; i++)
