@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+}
+
+// In this section you declare where to find the dependencies of your project
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main { 
+        java { 
+            srcDirs = ['src'] 
+            includes = ["${project.hasProperty('mainClass') ? project.mainClass : '*'}.java"]
+        }
+    }
+    test { java { srcDirs = ['test'] } }
+}
+
+dependencies {
+    implementation 'org.apache.spark:spark-core_2.12:3.5.1'
+    implementation 'org.apache.spark:spark-mllib_2.12:3.5.1'
+}
