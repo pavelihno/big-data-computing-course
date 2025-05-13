@@ -10,7 +10,7 @@ import java.util.Random;
 
 public class G23GEN {
 
-    private static final boolean DEBUG = false;
+    private static final boolean SAVE_OUTPUT = true;
     private static final int RANDOM_SEED = 123;
     private static final double GROUP_A_PROPORTION = 0.3;       // percentage of points in group A
     private static final double GROUP_A_STD = 5.0;              // SD for group A
@@ -74,7 +74,7 @@ public class G23GEN {
 
             @Override
             public String toString() {
-                if (DEBUG) {
+                if (SAVE_OUTPUT) {
                     return String.format(Locale.US, "%.3f,%.3f,%c,%d", x, y, group, clusterId);
                 }
                 else {
@@ -105,8 +105,8 @@ public class G23GEN {
         // Shuffle the points randomly
         Collections.shuffle(points, rand);
 
-        // Output points to CSV file
-        if (DEBUG) {
+        // Save points to CSV file
+        if (SAVE_OUTPUT) {
             try (FileWriter writer = new FileWriter(new File(CSV_OUTPUT_PATH))) {
                 for (Point point : points) {
                     writer.write(point.toString() + "\n");
