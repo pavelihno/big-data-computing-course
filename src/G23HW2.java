@@ -44,22 +44,26 @@ public class G23HW2 {
     }
 
     private static double MRComputeFairObjective(JavaPairRDD<Vector, String> pointsA,
-            JavaPairRDD<Vector, String> pointsB, Vector[] centers) {
+            JavaPairRDD<Vector, String> pointsB, long NA, long NB, Vector[] centers) {
         /*
          * Computes the average squared distance from all points to their nearest
          * centers
          * for both sets of points A and B, and returns the maximum of the two averages
          */
 
-        double totalSquaredDistanceA = pointsA.map(tuple -> {
-            return getMinSquaredDistance(tuple._1(), centers)._1();
-        }).reduce((a, b) -> a + b);
-        double totalSquaredDistanceB = pointsB.map(tuple -> {
-            return getMinSquaredDistance(tuple._1(), centers)._1();
-        }).reduce((a, b) -> a + b);
+        double averageSquaredDistanceA = 0.0;
+        if (NA > 0) {
+            double totalSquaredDistanceA = pointsA.map(tuple -> getMinSquaredDistance(tuple._1(), centers)._1())
+                    .reduce((a, b) -> a + b);
+            averageSquaredDistanceA = totalSquaredDistanceA / NA;
+        }
 
-        double averageSquaredDistanceA = totalSquaredDistanceA / pointsA.count();
-        double averageSquaredDistanceB = totalSquaredDistanceB / pointsB.count();
+        double averageSquaredDistanceB = 0.0;
+        if (NB > 0) {
+            double totalSquaredDistanceB = pointsB.map(tuple -> getMinSquaredDistance(tuple._1(), centers)._1())
+                    .reduce((a, b) -> a + b);
+            averageSquaredDistanceB = totalSquaredDistanceB / NB;
+        }
 
         return Math.max(averageSquaredDistanceA, averageSquaredDistanceB);
     }
@@ -201,26 +205,30 @@ public class G23HW2 {
             alpha[i] = (double) countA / NA;
             beta[i] = (double) countB / NB;
 
+            // Both groups have points in the cluster
             if (countA > 0) {
-                // Calculate mu_a[i] as the centroid of points from group A in cluster
                 double[] muAValues = new double[dimensions];
                 for (int j = 0; j < dimensions; j++) {
                     muAValues[j] = sumA.apply(j) / countA;
                 }
                 mu_a[i] = Vectors.dense(muAValues);
-            } else {
-                mu_a[i] = countB > 0 ? mu_b[i] : centers[i];
             }
-
             if (countB > 0) {
-                // Calculate mu_b[i] as the centroid of points from group B in cluster
                 double[] muBValues = new double[dimensions];
                 for (int j = 0; j < dimensions; j++) {
                     muBValues[j] = sumB.apply(j) / countB;
                 }
                 mu_b[i] = Vectors.dense(muBValues);
-            } else {
-                mu_b[i] = countA > 0 ? mu_a[i] : centers[i];
+            }
+
+            // No points from group A or group B in the cluster
+            if (countA == 0 && countB == 0) {
+                mu_a[i] = centers[i];
+                mu_b[i] = centers[i];
+            } else if (countA == 0) {
+                mu_a[i] = mu_b[i];
+            } else if (countB == 0) {
+                mu_b[i] = mu_a[i];
             }
 
             // Calculate ell[i] as Euclidean distance between mu_a[i] and mu_b[i]
@@ -228,20 +236,21 @@ public class G23HW2 {
         }
 
         // Compute fixedA and fixedB
-        Map<String, Double> fixedValues = clusteredPoints.mapToPair(tuple -> {
-            int clusterId = tuple._1();
-            Vector point = tuple._2()._1();
-            String group = tuple._2()._2();
-            double sqDist = 0.0;
+        Map<String, Double> fixedValues = clusteredPoints
+                .mapToPair(tuple -> {
+                    int clusterId = tuple._1();
+                    Vector point = tuple._2()._1();
+                    String group = tuple._2()._2();
+                    double sqDist = 0.0;
 
-            if (group.equals("A")) {
-                sqDist = Vectors.sqdist(point, mu_a[clusterId]);
-                return new Tuple2<>("A", sqDist);
-            } else {
-                sqDist = Vectors.sqdist(point, mu_b[clusterId]);
-                return new Tuple2<>("B", sqDist);
-            }
-        })
+                    if (group.equals("A")) {
+                        sqDist = Vectors.sqdist(point, mu_a[clusterId]);
+                        return new Tuple2<>("A", sqDist);
+                    } else {
+                        sqDist = Vectors.sqdist(point, mu_b[clusterId]);
+                        return new Tuple2<>("B", sqDist);
+                    }
+                })
                 .reduceByKey((a, b) -> a + b)
                 .collectAsMap();
 
@@ -271,6 +280,11 @@ public class G23HW2 {
          * Computes the K-means clustering using Fair Lloyd's algorithm
          * and returns the cluster centers
          */
+
+        // No points in one of the groups
+        if (NA == 0 || NB == 0) {
+            return MRLloyds(points, K, M);
+        }
 
         // Initialization of centers (using kmeans|| with 0 iterations)
         Vector[] centers = MRLloyds(points, K, 0);
@@ -397,11 +411,11 @@ public class G23HW2 {
 
             // Compute fair objectives (with timers)
             Tuple2<Double, Double> standardCentersObjResult = timeOperation(
-                    () -> MRComputeFairObjective(inputPointsA, inputPointsB, standardCenters));
+                    () -> MRComputeFairObjective(inputPointsA, inputPointsB, NA, NB, standardCenters));
             double standardCentersObj = standardCentersObjResult._1();
 
             Tuple2<Double, Double> fairCentersObjResult = timeOperation(
-                    () -> MRComputeFairObjective(inputPointsA, inputPointsB, fairCenters));
+                    () -> MRComputeFairObjective(inputPointsA, inputPointsB, NA, NB, fairCenters));
             double fairCentersObj = fairCentersObjResult._1();
 
             // Print statistics
