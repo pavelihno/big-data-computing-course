@@ -79,7 +79,13 @@ gradlew run -PmainClass=G23Visualize --args="./data/fair_points.csv"
 
 2. Transfer the JAR file to the cloud
 
-    - Via PSCP (Windows)
+    - Via PSCP (Windows) to the UNIPD machine
+
+        ```sh
+        pscp -P 22 build/libs/BDC.jar <account_name>@ssh.studenti.math.unipd.it:/home/0/2024/<account_name>/
+        ```
+    
+    - Via PSCP (Windows) to the cloud
 
         ```sh
         pscp -P 2222 build/libs/BDC.jar group23@147.162.226.106:/home/group23/
