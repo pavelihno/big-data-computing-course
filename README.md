@@ -109,3 +109,16 @@ gradlew run -PmainClass=G23Visualize --args="./data/fair_points.csv"
     cd /home/group23
     spark-submit --num-executors <num_executors> --class G23HW2 BDC.jar <hdfs_file_path> 16 100 10
     ```
+
+### Homework 3
+
+*Ports*:
+- **8887**: Stream with few very frequent elements, rest random in 32-bit domain.
+- **8889**: Stream with few very frequent elements, some moderately frequent, rest random in 32-bit domain.
+- **8886**: Deterministic version of 8887 stream for testing.
+- **8888**: Deterministic version of 8889 stream for testing.
+
+```sh
+gradlew run -PmainClass=G23HW3 --args"<portExp> <targetNumItems> <rowsNum> <colsNum> <topNum>"
+gradlew run -PmainClass=G23HW3 --args="8888 1000000 4 128 20"
+```
