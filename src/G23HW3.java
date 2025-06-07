@@ -124,7 +124,13 @@ public class G23HW3 {
         int[][] b_sign = new int[D][1]; // 'b' values for sign hash functions
 
         // Generate hash function parameters
-        Random rand = new Random(RANDOM_SEED);
+
+        // Fixed random seed for reproducibility
+        // Random rand = new Random(RANDOM_SEED);
+
+        // New random instance for each run
+        Random rand = new Random();
+
         for (int i = 0; i < D; i++) {
             // For count-min sketch
             a_cm[i][0] = rand.nextInt(1, (P - 1) + 1); // [1, p-1]
@@ -165,7 +171,6 @@ public class G23HW3 {
                     }
 
                     if (streamLength[0] >= T) {
-                        System.out.println("Reached the threshold of " + T + " elements");
                         stoppingSemaphore.release();
                     }
                 }
