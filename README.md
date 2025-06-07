@@ -120,5 +120,6 @@ gradlew run -PmainClass=G23Visualize --args="./data/fair_points.csv"
 
 ```sh
 gradlew run -PmainClass=G23HW3 --args"<portExp> <targetNumItems> <rowsNum> <colsNum> <topNum>"
-gradlew run -PmainClass=G23HW3 --args="8888 1000000 4 128 20"
+gradlew run -PmainClass=G23HW3 --args="8886 200000 7 100 10"
+gradlew run -PmainClass=G23HW3 --args="8886 200000 7 100 20"
 ```

@@ -23,25 +23,13 @@ public class G23HW3 {
     private static void updateCountMinSketch(int[][] sketch, int item, int[][] a, int[][] b, int W) {
         int D = sketch.length;
 
-        // Find minimum counter value
-        int minValue = Integer.MAX_VALUE;
+        // Increment all counters in the hash positions
         for (int i = 0; i < D; i++) {
             int hash = ((a[i][0] * item + b[i][0]) % P) % W;
             // Ensure positive index
             if (hash < 0)
                 hash += W;
-            minValue = Math.min(minValue, sketch[i][hash]);
-        }
-
-        // Increment only counters with minimum value
-        for (int i = 0; i < D; i++) {
-            int hash = ((a[i][0] * item + b[i][0]) % P) % W;
-            // Ensure positive index
-            if (hash < 0)
-                hash += W;
-            if (sketch[i][hash] == minValue) {
-                sketch[i][hash]++;
-            }
+            sketch[i][hash]++;
         }
     }
 
@@ -158,7 +146,7 @@ public class G23HW3 {
 
                 if (availableItems > 0) {
                     // Process only items to reach T
-                    List<Integer> items = rdd.map(s -> Integer.parseInt(s)).take((int)availableItems);
+                    List<Integer> items = rdd.map(s -> Integer.parseInt(s)).take((int) availableItems);
 
                     for (Integer item : items) {
                         // Update exact frequencies
@@ -194,9 +182,11 @@ public class G23HW3 {
         sortedFrequencies.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
 
         // Find the K-th frequency (phi(K))
-        final int kthFrequency = (!sortedFrequencies.isEmpty() && K <= sortedFrequencies.size()) ? sortedFrequencies.get(K - 1).getValue() : 0;
+        final int kthFrequency = (!sortedFrequencies.isEmpty() && K <= sortedFrequencies.size())
+                ? sortedFrequencies.get(K - 1).getValue()
+                : 0;
 
-        // Get top-K heavy hitters 
+        // Get top-K heavy hitters
         List<Map.Entry<Integer, Integer>> heavyHitters = sortedFrequencies.stream()
                 .filter(entry -> entry.getValue() >= kthFrequency)
                 .collect(Collectors.toList());
@@ -223,34 +213,28 @@ public class G23HW3 {
         }
         double csAvgError = csTotalError / heavyHitters.size();
 
-        // Print input parameters
-        System.out.println("Port: " + portExp);
-        System.out.println("Target number of items to process (T): " + T);
-        System.out.println("Number of sketch rows (D): " + D);
-        System.out.println("Number of sketch columns (W): " + W);
-        System.out.println("Number of top frequent items (K): " + K);
-
         // Print results
-        System.out.println("\nRESULTS:");
-        System.out.println("Port: " + portExp);
-        System.out.println("Target number of items to process (T): " + T);
-        System.out.println("Number of sketch rows (D): " + D);
-        System.out.println("Number of sketch columns (W): " + W);
-        System.out.println("Number of top frequent items (K): " + K);
-        System.out.println("Number of distinct items: " + exactFrequencies.size());
-        System.out.println("Average relative error of Count-Min Sketch: " + cmAvgError);
-        System.out.println("Average relative error of Count Sketch: " + csAvgError);
+        System.out.println("Port = " + portExp + " T = " + T + " D = " + D + " W = " + W + " K = " + K);
+        System.out.println("Number of processed items = " + streamLength[0]);
+        System.out.println("Number of distinct items  = " + exactFrequencies.size());
+        System.out.println("Number of Top-K Heavy Hitters = " + heavyHitters.size());
+        System.out.println("Avg Relative Error for Top-K Heavy Hitters with CM = " + cmAvgError);
+        System.out.println("Avg Relative Error for Top-K Heavy Hitters with CS = " + csAvgError);
 
-        // Print heavy hitters frequencies
-        System.out.println("\nTop-" + K + " heavy hitters:");
-        System.out.println("Item\t\tTrue Freq\tCM Est Freq\tCS Est Freq");
-        for (int i = 0; i < Math.min(K, heavyHitters.size()); i++) {
-            Map.Entry<Integer, Integer> entry = heavyHitters.get(i);
-            int item = entry.getKey();
-            int trueFreq = entry.getValue();
-            int cmEstFreq = estimateCountMin(countMinSketch, item, a_cm, b_cm, W);
-            int csEstFreq = estimateCountSketch(countSketch, item, a_cs, b_cs, a_sign, b_sign, W);
-            System.out.println(item + "\t" + trueFreq + "\t\t" + cmEstFreq + "\t\t" + csEstFreq);
+        // Print heavy hitter information only if K <= 10
+        if (K <= 10) {
+            System.out.println("Top-K Heavy Hitters:");
+            // Sort by in ascending order of item ID
+            heavyHitters.sort((e1, e2) -> e1.getKey().compareTo(e2.getKey()));
+
+            for (int i = 0; i < Math.min(K, heavyHitters.size()); i++) {
+                Map.Entry<Integer, Integer> entry = heavyHitters.get(i);
+                int item = entry.getKey();
+                int trueFreq = entry.getValue();
+                int cmEstFreq = estimateCountMin(countMinSketch, item, a_cm, b_cm, W);
+
+                System.out.println("Item " + item + " True Frequency = " + trueFreq + " Estimated Frequency with CM = " + cmEstFreq);
+            }
         }
     }
 }
